@@ -551,3 +551,74 @@ def test_pair_plausibility_band_rejects_bait_but_keeps_dislocations():
     assert not (implied / PAIR_PLAUSIBILITY <= 1.0 <= implied * PAIR_PLAUSIBILITY)
     dislocated = implied * 2.0
     assert implied / PAIR_PLAUSIBILITY <= dislocated <= implied * PAIR_PLAUSIBILITY
+
+
+# -- collector resilience (outage / sleep recovery) ---------------------
+
+from datetime import timedelta as _td
+
+from poe2market.collect.daemon import (
+    CATCHUP_FACTOR, RETRY_MAX, ScheduledJob, _is_soft_failure,
+)
+
+
+def _job(interval_minutes=30):
+    async def noop():
+        return {}
+    return ScheduledJob(name="t", interval=_td(minutes=interval_minutes), run=noop)
+
+
+def test_failure_retries_sooner_not_later():
+    """Backoff on the full cadence would strand a job after an outage."""
+    j = _job(30)
+    now = utcnow()
+    j.failures = 1
+    j.reschedule(now)
+    first = j.next_run - now
+    assert first < _td(minutes=30), "a failing job must retry before its cadence"
+
+
+def test_retry_delay_is_capped():
+    j = _job(600)
+    now = utcnow()
+    j.failures = 12          # a long outage
+    j.reschedule(now)
+    assert (j.next_run - now) <= RETRY_MAX
+
+
+def test_retry_never_exceeds_the_normal_cadence():
+    """A frequent job shouldn't be slowed down by the retry schedule."""
+    j = _job(1)
+    now = utcnow()
+    j.failures = 5
+    j.reschedule(now)
+    assert (j.next_run - now) <= _td(minutes=1)
+
+
+def test_success_restores_normal_cadence():
+    j = _job(30)
+    now = utcnow()
+    j.failures = 0
+    j.reschedule(now)
+    assert (j.next_run - now) == _td(minutes=30)
+
+
+def test_soft_failure_detection():
+    # Collected nothing, or reported an error, without raising.
+    assert _is_soft_failure({"source": "poe.ninja", "priced": 0})
+    assert _is_soft_failure({"priced": 0, "error": "boom"})
+    assert _is_soft_failure({"error": "fetch failed"})
+    assert _is_soft_failure({"pairs": 0})
+    # Real work done.
+    assert not _is_soft_failure({"source": "poe.ninja", "priced": 580})
+    assert not _is_soft_failure({"pairs": 12})
+    # Jobs with no count (e.g. maintain) are not failures.
+    assert not _is_soft_failure({"rollup": {}, "prune": {}})
+    assert not _is_soft_failure(None)
+
+
+def test_catchup_threshold_is_a_real_gap():
+    """Sleeping/offline for much longer than the cadence is a catch-up."""
+    j = _job(30)
+    lateness = _td(minutes=30) * CATCHUP_FACTOR + _td(minutes=1)
+    assert lateness > j.interval * CATCHUP_FACTOR

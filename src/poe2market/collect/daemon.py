@@ -28,6 +28,16 @@ from .jobs import Collector
 
 log = logging.getLogger("poe2market.collector")
 
+#: Retry pacing for a failing job. Short and capped so recovery after an
+#: outage, sleep, or dropped connection happens quickly rather than waiting
+#: out the job's full cadence.
+RETRY_BASE = timedelta(seconds=30)
+RETRY_MAX = timedelta(minutes=5)
+
+#: A gap this much longer than a job's cadence means the machine was asleep,
+#: offline, or the daemon was stopped — worth logging as a catch-up.
+CATCHUP_FACTOR = 2
+
 
 @dataclass
 class ScheduledJob:
@@ -42,10 +52,20 @@ class ScheduledJob:
         return self.next_run is None or now >= self.next_run
 
     def reschedule(self, now) -> None:
-        # Exponential backoff on repeated failure, capped at 8x, so a broken
-        # job degrades instead of hammering the API.
-        factor = min(2**self.failures, 8)
-        self.next_run = now + self.interval * factor
+        """Pick the next run time.
+
+        On failure this retries *sooner*, not later. Exponential backoff on the
+        full cadence is wrong for an outage: a 30-minute job that fails while
+        the network is down would wait hours after it returns. Instead a failing
+        job polls on a short, capped interval so it resumes within a minute or
+        two of connectivity coming back, then returns to its normal cadence on
+        the first success.
+        """
+        if self.failures:
+            delay = min(RETRY_BASE * (2 ** (self.failures - 1)), RETRY_MAX)
+            self.next_run = now + min(delay, self.interval)
+        else:
+            self.next_run = now + self.interval
 
 
 def build_jobs(cfg: Config, collector: Collector) -> list[ScheduledJob]:
@@ -112,6 +132,19 @@ def watchlist_fingerprint(cfg: Config) -> tuple:
     if main.exists():
         sig.append((main.name, main.stat().st_mtime_ns))
     return tuple(sig)
+
+
+def _is_soft_failure(result: Any) -> bool:
+    """True when a job returned without raising but achieved nothing."""
+    if not isinstance(result, dict):
+        return False
+    if result.get("error"):
+        return True
+    # Jobs report how much they collected under one of these keys.
+    for key in ("priced", "pairs", "written"):
+        if key in result:
+            return not result[key]
+    return False
 
 
 def _bind(fn, *args):
@@ -201,10 +234,32 @@ class CollectorDaemon:
                 for job in due:
                     if self._stop.is_set():
                         break
+                    # A long gap means we were asleep, offline, or stopped;
+                    # the job is due immediately and this records the catch-up.
+                    if job.next_run and (now - job.next_run) > job.interval * CATCHUP_FACTOR:
+                        log.info(
+                            "%s: catching up, %s late",
+                            job.name, str(now - job.next_run).split(".")[0],
+                        )
+
                     try:
                         job.last_result = await job.run()
-                        job.failures = 0
-                        log.info("%s -> %s", job.name, job.last_result)
+                        # Not every failure raises. A job that reports an error
+                        # or collected nothing (a transient upstream hiccup,
+                        # e.g. poe.ninja returning no usable rate) must also
+                        # retry soon rather than sleep the full cadence.
+                        if _is_soft_failure(job.last_result):
+                            job.failures += 1
+                            log.warning(
+                                "%s produced no data (%d in a row) -> %s",
+                                job.name, job.failures, job.last_result,
+                            )
+                        else:
+                            if job.failures:
+                                log.info("%s recovered after %d failure(s)",
+                                         job.name, job.failures)
+                            job.failures = 0
+                            log.info("%s -> %s", job.name, job.last_result)
                     except Exception:
                         job.failures += 1
                         log.exception("%s failed (%d in a row)", job.name, job.failures)

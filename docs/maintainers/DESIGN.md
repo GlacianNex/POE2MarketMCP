@@ -242,7 +242,11 @@ Break these and the data silently degrades rather than failing loudly.
    earn an IP restriction that stops collection entirely.
 4. **Rollups must stay idempotent.** They recompute whole buckets. A crash
    mid-sweep must never double-count.
-5. **Charts read rollups, never raw samples.** Raw ticks are pruned after 14
+5. **Failure must retry sooner, never later.** Exponential backoff on a job's
+   full cadence strands it after an outage — a 30-minute job failing while the
+   network is down would wait hours after it returns. Retries use a short capped
+   interval, and a job returning no data counts as a failure.
+6. **Charts read rollups, never raw samples.** Raw ticks are pruned after 14
    days; anything reading them breaks silently once retention kicks in.
 
 ## Adding things

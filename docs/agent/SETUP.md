@@ -45,6 +45,21 @@ Watchlists and `config.toml` **hot-reload**: edits take effect on the next tick
 without a restart, and existing job timers are preserved so a reload does not
 stampede the API.
 
+### Recovering from sleep, reboot, or a dropped connection
+
+Collection resumes on its own:
+
+- **Machine sleeps or goes offline** — jobs fall overdue and run within ~60s of
+  waking, logged as `catching up, N late`.
+- **Reboot** — the service starts at login and runs every due job immediately.
+- **A fetch fails, or returns nothing** — the job retries on a short, capped
+  schedule (30s doubling to 5 min) instead of waiting out its full cadence, so
+  it resumes a minute or two after connectivity returns. Normal cadence is
+  restored on the first success (`recovered after N failure(s)`).
+
+A job that returns without error but collected nothing counts as a failure too —
+an upstream hiccup should not cost a whole cadence of data.
+
 ## Watchlists
 
 Currency is swept automatically. Named items live in
