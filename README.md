@@ -50,46 +50,34 @@ poe2market install-daemon          # run it continuously via launchd
 Run `validate` before each league: an over-constrained target never errors, it
 just records an empty series until you notice.
 
-## Rate limits, and why the design looks like this
+## Rate limits
 
-Limits are advertised per response and enforced per IP. Measured on the
-unauthenticated endpoints:
+**poe.ninja (currency)** — CDN-cached ~30 min; the collector polls on that
+cadence. Independent of GGG, so background collection never affects your
+in-game trade.
 
-| Endpoint | Limit | Notes |
-|---|---|---|
-| `exchange` | 30 / 300s | Up to **10** `want` ids per call |
-| `search` | 600 / 21600s | 1 request per query |
-| `fetch` | 1000 / 21600s | 10 listings per request |
+**GGG trade API (items, stash)** — called only on demand. Limits are advertised
+per response and enforced **per IP**, the same IP your game client uses:
 
-That 10-id cap is the single most consequential constraint. Pricing all ~800
-exchangeable currencies costs ~160 requests per pass, so sweeping everything at
-a short cadence is impossible. Hence **tiers** in `config.toml`: core orbs every
-10 minutes, the long tail every 6 hours.
+| Endpoint | Limit |
+|---|---|
+| `search` | 600 / 21600s |
+| `fetch` | 1000 / 21600s (10 listings each) |
+| `exchange` | 30 / 300s |
 
-### Both directions get sampled
-
-The exchange endpoint is asymmetric:
-
-- `have=exalted, want=[X]` — people **selling** X → the **ask**
-- `have=[X], want=exalted` — people **buying** X → the **bid**
-
-Sampling one direction silently under-reports. In testing, `chaos` had zero ask
-liquidity but a live bid at 13.75 ex — invisible to a one-sided sweep.
+Because the budget is shared with your game, live lookups are deliberately
+sparing, and a cross-process ledger in SQLite keeps the collector and MCP server
+from double-spending it.
 
 ### Prices carry confidence, not just a number
 
-PoE2's trade-site book is thin, and a 90% bid/ask spread is common. A midpoint
-quoted without that context misleads anything trading on it, so every quote
-carries `spread_pct` and a `confidence` label. Conversions are side-aware:
-buying uses the ask, stash valuation uses the bid.
-
-> The trade API covers the **trade site**. PoE2's in-game **Currency Exchange**
-> is a separate order book with no public API and carries most currency volume.
-> This is the slice of the market you can actually buy from by whisper.
+Thin books are common, and a wide bid/ask spread makes a midpoint misleading.
+Every quote carries `spread_pct` and a `confidence` label. Conversions are
+side-aware: buying uses the ask, stash valuation uses the bid.
 
 ## Watchlists
 
-Currency is swept automatically. Named items are declared in
+Currency comes from poe.ninja automatically. Named *items* are declared in
 `config/watchlists/*.toml`, each with its own cadence and priority, so the
 budget can be steered at whatever matters this week:
 
