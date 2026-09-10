@@ -1,0 +1,49 @@
+name = "meta-gear"
+description = """
+Build-defining rare gear, specified by the mods that make it valuable rather
+than by item name. This is what watchlists are actually for: at league start
+the money is in knowing what a +3 spell-level wand with life is worth, and
+that item has no name to look up."""
+enabled = false
+cadence_minutes = 45
+priority = 9
+
+# Any wand base with +3 to all Spell Skills. Omitting `type` searches every
+# base, which is usually what you want: the mod is what carries the value, and
+# constraining the base only hides listings. Verified live: 50 matches, versus
+# 0 when a 50-life requirement was also imposed — life on a wand is rare, so
+# stacking that condition silently produced an empty series.
+[[target]]
+key = "gear:wand-plus3-spell"
+label = "Any wand, +3 to all Spell Skills"
+kind = "raw"
+sample_size = 10
+[target.raw_query.query]
+status = { option = "online" }
+[target.raw_query.query.filters.type_filters.filters.category]
+option = "weapon.wand"
+[[target.raw_query.query.stats]]
+type = "and"
+[[target.raw_query.query.stats.filters]]
+id = "explicit.stat_124131830"          # + to Level of all Spell Skills
+[target.raw_query.query.stats.filters.value]
+min = 3
+
+# "Any of these mods, at least one" — a `count` group rather than `and`.
+[[target]]
+key = "gear:crit-amulet"
+label = "Rare amulet with any strong crit mod"
+kind = "raw"
+sample_size = 10
+[target.raw_query.query]
+status = { option = "online" }
+type = "Stellar Amulet"
+[target.raw_query.query.filters.type_filters.filters.rarity]
+option = "rare"
+[[target.raw_query.query.stats]]
+type = "count"
+value = { min = 1 }
+[[target.raw_query.query.stats.filters]]
+id = "explicit.stat_587431675"          # increased Critical Hit Chance
+[[target.raw_query.query.stats.filters]]
+id = "explicit.stat_3556824919"         # increased Critical Damage Bonus

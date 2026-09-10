@@ -1,0 +1,51 @@
+name = "league-start"
+description = """
+High-demand items in the first days of a league, when prices move hourly and
+the early-mover advantage is largest. Raise the cadence at league start and
+disable this list once prices settle (enabled = false)."""
+enabled = false
+cadence_minutes = 20
+priority = 10
+
+# 20-minute cadence is aggressive: 6 targets x 3 passes/hour = ~36 searches/hour.
+# The search budget is 600 per 6h (100/hour), so keep this list short.
+
+[[target]]
+key = "ls:astramentis"
+label = "Astramentis (early stat stick)"
+kind = "unique"
+name = "Astramentis"
+type = "Stellar Amulet"
+sample_size = 10
+
+[[target]]
+key = "ls:defiance-of-destiny"
+label = "Defiance of Destiny"
+kind = "unique"
+name = "Defiance of Destiny"
+type = "Jade Amulet"
+sample_size = 10
+
+[[target]]
+key = "ls:blackflame"
+label = "Blackflame"
+kind = "unique"
+name = "Blackflame"
+type = "Amethyst Ring"
+sample_size = 10
+
+[[target]]
+key = "ls:polcirkeln"
+label = "Polcirkeln"
+kind = "unique"
+name = "Polcirkeln"
+type = "Sapphire Ring"
+sample_size = 10
+
+[[target]]
+key = "ls:andvarius"
+label = "Andvarius (rarity ring)"
+kind = "unique"
+name = "Andvarius"
+type = "Gold Ring"
+sample_size = 10

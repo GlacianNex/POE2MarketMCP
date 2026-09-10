@@ -1,0 +1,97 @@
+# POE2MarketMCP configuration.
+# Override contact_email at runtime with POE2MARKET_CONTACT_EMAIL.
+
+contact_email = "you@example.com"
+
+# Leagues to collect.
+#   "@current"     -> the active challenge league, resolved at runtime
+#   "@current-hc"  -> its hardcore counterpart
+#   "Some League"  -> pinned by exact name from /api/trade2/data/leagues
+# Resolution uses the trade API's ordering, which puts the active challenge
+# league first (there is no date metadata for PoE2 leagues). The result is
+# cached, so a transient API failure cannot redirect collection elsewhere.
+# Leave as "@current" and a new league is picked up automatically at rollover.
+leagues = ["Forbidden Rites"]
+realm = "poe2"
+
+db_path = "data/market.db"
+
+# Everything is charted against this currency.
+base_currency = "exalted"
+
+# Sweep every liquid currency this often. Cheap: ~16 requests against a
+# 30-per-5-minute budget.
+currency_cadence_minutes = 10
+
+# Roll raw samples up into hourly/daily candles this often.
+rollup_cadence_minutes = 15
+
+# Raw per-listing rows are the bulkiest table; keep two weeks and let the
+# rollups carry the long history.
+raw_retention_days = 14
+
+# --- Stash valuation ------------------------------------------------------
+# Your account handle WITH discriminator, e.g. "Name#1234". Reads your public
+# trade listings (no login). Only tabs with a buyout price are visible.
+# Override with POE2MARKET_ACCOUNT.
+stash_account = "YourName#0000"
+
+log_level = "INFO"
+
+# --- Direct pair rates (multi-hop arbitrage) ------------------------------
+# Every other price is quoted against the base currency, which makes all
+# cross-rates synthetic — a cycle built from them always loses the spread on
+# each leg and can never show a profit. Genuine multi-hop arbitrage lives in
+# DIRECT pair quotes, where chaos->divine can drift from chaos->exalted->divine.
+# One request prices every pair leaving a currency, so this costs N requests.
+# Keep this list to currencies within roughly two orders of magnitude of each
+# other. Mirror of Kalandra is deliberately absent: at ~100,000 alchs it has no
+# direct market against anything here, and every listing on such a pair is bait
+# reading "1 for 1". Including it would burn a request per sweep to rediscover
+# that. Pairs that drift too far apart in value are skipped automatically.
+# Measured, not guessed: `poe2market suggest-pairs` ranks currencies by
+# two-sided liquidity from collected data. Only these trade on both sides;
+# everything else is ask-only and cannot close a loop. Mirror of Kalandra is
+# excluded because it showed zero two-sided samples — its only listings are
+# bait reading "1 for 1", which is also why it appeared to cost 1 exalted.
+# The base currency must be present for routing comparisons.
+pair_currencies = []
+pair_cadence_minutes = 15
+
+# --- Currency sweep tiers -------------------------------------------------
+# One exchange request prices at most 10 currencies, and both directions are
+# sampled, so a tier of N currencies costs ceil(N/10)*2 requests per pass.
+# Budget is 30 requests per 300s. Categories come from /data/static.
+
+# Fast lane: the handful of orbs you actually trade. 10 ids == 2 requests per
+# pass (both directions). Set to 2 minutes rather than 1: the binding limit is
+# 30 requests per 300s, and the hourly average hides the fact that the
+# `secondary` tier fires a 52-request burst that alone exceeds that window and
+# self-throttles across ~9 minutes. At 1 minute the exchange budget was
+# observed at 29/30 — too close to a restriction for no real gain, since the
+# median listing is already ~85 minutes old when GGG serves it.
+[[currency_tier]]
+name = "fast"
+currencies = ["divine", "chaos", "annul", "regal", "vaal", "alch",
+              "mirror", "gcp", "artificers", "fracturing-orb"]
+cadence_minutes = 2
+enabled = false
+
+[[currency_tier]]
+name = "core"
+categories = ["Currency"]
+cadence_minutes = 10          # 40 items -> 8 requests per pass
+enabled = false
+
+[[currency_tier]]
+name = "secondary"
+categories = ["Fragments", "Essences", "Waystones", "Breach", "Ritual", "Expedition"]
+cadence_minutes = 60          # ~260 items -> 52 requests per pass
+enabled = false
+
+[[currency_tier]]
+name = "long-tail"
+categories = ["*"]            # everything else: runes, vaal, delirium, gems
+cadence_minutes = 360         # ~500 items -> 100 requests spread over 6h
+enabled = false
+

@@ -1,0 +1,53 @@
+name = "crafting-bases"
+description = """
+High item-level rare bases — where league-start currency is actually made.
+These use `filters` to narrow to the ilvl bands that matter for crafting;
+an unfiltered base type search returns mostly worthless low-ilvl drops."""
+enabled = false
+cadence_minutes = 90
+priority = 6
+
+[[target]]
+key = "base:stellar-amulet-i82"
+label = "Stellar Amulet, ilvl 82+"
+kind = "base"
+type = "Stellar Amulet"
+sample_size = 10
+[target.filters.misc_filters.filters.ilvl]
+min = 82
+
+[[target]]
+key = "base:sapphire-ring-i82"
+label = "Sapphire Ring, ilvl 82+"
+kind = "base"
+type = "Sapphire Ring"
+sample_size = 10
+[target.filters.misc_filters.filters.ilvl]
+min = 82
+
+[[target]]
+key = "base:time-lost-diamond"
+label = "Time-Lost Diamond"
+kind = "base"
+type = "Time-Lost Diamond"
+sample_size = 10
+
+# Anything the shorthands cannot express goes in as a raw trade2 query body.
+# This one asks for a rare (not unique) Stellar Amulet with 80+ total
+# resistances, using the API's pseudo stats.
+[[target]]
+key = "base:tri-res-amulet"
+label = "Rare amulet, 80+ total resistances"
+kind = "raw"
+sample_size = 10
+[target.raw_query.query]
+status = { option = "online" }
+type = "Stellar Amulet"
+[target.raw_query.query.filters.type_filters.filters.rarity]
+option = "rare"
+[[target.raw_query.query.stats]]
+type = "and"
+[[target.raw_query.query.stats.filters]]
+id = "pseudo.pseudo_total_elemental_resistance"
+[target.raw_query.query.stats.filters.value]
+min = 80

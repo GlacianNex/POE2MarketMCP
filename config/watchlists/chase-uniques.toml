@@ -1,0 +1,56 @@
+name = "chase-uniques"
+enabled = false
+description = "High-value uniques. Slow cadence: these move on the scale of days, not minutes."
+cadence_minutes = 120
+priority = 8
+
+# Each target costs 1 search + ceil(sample_size/10) fetches per pass.
+# 6 targets every 2h = ~72 requests/day against a 600-per-6h search budget.
+
+[[target]]
+key = "uniq:mageblood"
+label = "Mageblood"
+kind = "unique"
+name = "Mageblood"
+type = "Utility Belt"
+sample_size = 10
+
+[[target]]
+key = "uniq:headhunter"
+label = "Headhunter"
+kind = "unique"
+name = "Headhunter"
+type = "Heavy Belt"
+sample_size = 10
+
+[[target]]
+key = "uniq:astramentis"
+label = "Astramentis"
+kind = "unique"
+name = "Astramentis"
+type = "Stellar Amulet"
+sample_size = 10
+
+[[target]]
+key = "uniq:ingenuity"
+label = "Ingenuity"
+kind = "unique"
+name = "Ingenuity"
+type = "Utility Belt"
+sample_size = 10
+
+[[target]]
+key = "uniq:original-sin"
+label = "Original Sin"
+kind = "unique"
+name = "Original Sin"
+type = "Amethyst Ring"
+sample_size = 10
+
+[[target]]
+key = "uniq:the-adorned"
+label = "The Adorned"
+kind = "unique"
+name = "The Adorned"
+type = "Diamond"
+sample_size = 10
