@@ -211,7 +211,9 @@ class Collector:
         )
         return {"tier": tier.name, "priced": priced, "candidates": len(ids)}
 
-    async def sweep_ninja_currency(self, league: str) -> dict[str, Any]:
+    async def sweep_ninja_currency(
+        self, league: str, *, force: bool = False
+    ) -> dict[str, Any]:
         """Store currency prices from poe.ninja's in-game exchange data.
 
         This is the accurate currency source. The GGG trade2 exchange reads the
@@ -236,7 +238,7 @@ class Collector:
         try:
             async with NinjaClient() as ninja:
                 quotes = await ninja.currency_quotes(
-                    league, base, fallback_base_in_divine=fallback
+                    league, base, fallback_base_in_divine=fallback, force=force
                 )
         except Exception as exc:
             log.warning("poe.ninja sweep failed: %s", exc)

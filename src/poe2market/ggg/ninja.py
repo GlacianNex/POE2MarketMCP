@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import asyncio
+import time
 
 import httpx
 
@@ -70,6 +71,7 @@ class NinjaClient:
     def __init__(self, timeout: float = 20.0,
                  retry_delay: float = BASE_RATE_RETRY_DELAY) -> None:
         self.retry_delay = retry_delay
+        self.last_response_age: str | None = None
         self._client = httpx.AsyncClient(headers=_HEADERS, timeout=timeout)
 
     async def aclose(self) -> None:
@@ -86,17 +88,33 @@ class NinjaClient:
         r.raise_for_status()
         return [L["id"] for L in r.json()]
 
-    async def _overview(self, league: str, type_: str) -> dict[str, Any]:
+    async def _overview(
+        self, league: str, type_: str, *, force: bool = False
+    ) -> dict[str, Any]:
+        """Fetch one category overview.
+
+        ``force`` bypasses the CDN edge cache. A ``Cache-Control: no-cache``
+        header alone is not honoured for anonymous requests, so a unique query
+        parameter is added to change the cache key — that reliably reaches the
+        origin. Only use it for an explicit user-requested refresh; the
+        scheduled sweep should ride the cache.
+        """
+        params: dict[str, Any] = {"league": league, "type": type_}
+        headers = {}
+        if force:
+            params["_"] = int(time.time() * 1000)
+            headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
         r = await self._client.get(
             f"{NINJA_BASE}/exchange/current/overview",
-            params={"league": league, "type": type_},
+            params=params, headers=headers or None,
         )
         r.raise_for_status()
+        self.last_response_age = r.headers.get("age")
         return r.json()
 
     async def currency_quotes(
         self, league: str, base_currency: str, *, types: list[str] | None = None,
-        fallback_base_in_divine: float | None = None,
+        fallback_base_in_divine: float | None = None, force: bool = False,
     ) -> dict[str, NinjaQuote]:
         """Fetch currency prices for ``league`` keyed by exchange id.
 
@@ -118,7 +136,7 @@ class NinjaClient:
         if base_in_divine is None:
             for attempt in range(BASE_RATE_ATTEMPTS):
                 try:
-                    cur = await self._overview(league, "Currency")
+                    cur = await self._overview(league, "Currency", force=force)
                     cached["Currency"] = cur
                     by_id = {L["id"]: L for L in cur.get("lines", [])}
                     bl = by_id.get(base_currency)
@@ -139,7 +157,7 @@ class NinjaClient:
 
         if not base_in_divine and fallback_base_in_divine:
             # A slightly stale conversion rate is far better than no prices at
-            # all: the rate moves on the order of hours, the sweep every 30 min.
+            # all: the rate moves on the order of hours, the sweep hourly.
             base_in_divine = fallback_base_in_divine
             log.warning(
                 "poe.ninja: using last known %s rate (%.6g divine)",
@@ -153,7 +171,9 @@ class NinjaClient:
         for type_ in (types or CURRENCY_TYPES):
             try:
                 # The Currency payload was already fetched for the base rate.
-                data = cached.get(type_) or await self._overview(league, type_)
+                data = cached.get(type_) or await self._overview(
+                    league, type_, force=force
+                )
             except Exception as exc:
                 log.warning("poe.ninja %s/%s failed: %s", league, type_, exc)
                 continue

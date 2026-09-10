@@ -639,7 +639,7 @@ class _FakeNinja(NinjaClient):
         self.fail_times = fail_times
         self.currency_calls = 0
 
-    async def _overview(self, league, type_):
+    async def _overview(self, league, type_, *, force=False):
         if type_ == "Currency":
             self.currency_calls += 1
             if self.currency_calls <= self.fail_times:
@@ -697,3 +697,42 @@ def test_fallback_conversion_matches_stored_rate_direction():
     q = asyncio.run(n.currency_quotes(
         "L", "exalted", types=["Currency"], fallback_base_in_divine=fallback))
     assert q["divine"].value_in_base == pytest.approx(divine_in_base)
+
+
+def test_forced_refresh_busts_the_cdn_cache():
+    """A forced refresh must reach origin, not re-read the cached response.
+
+    Verified live: a normal request returns cf-cache-status REVALIDATED, a
+    forced one returns MISS. The unique query parameter is what changes the
+    cache key — a no-cache header alone is not honoured for anonymous requests.
+    """
+    captured = {}
+
+    class _Probe(NinjaClient):
+        def __init__(self):
+            self.retry_delay = 0
+            self.last_response_age = None
+
+            class _C:
+                async def get(_self, url, params=None, headers=None):
+                    captured["params"] = params
+                    captured["headers"] = headers
+
+                    class _R:
+                        headers = {}
+                        def raise_for_status(_s): pass
+                        def json(_s): return {"items": [], "lines": []}
+                    return _R()
+            self._client = _C()
+
+        async def aclose(self):
+            return None
+
+    p = _Probe()
+    asyncio.run(p._overview("L", "Currency", force=False))
+    assert "_" not in captured["params"], "normal fetch must stay cacheable"
+    assert not captured["headers"]
+
+    asyncio.run(p._overview("L", "Currency", force=True))
+    assert "_" in captured["params"], "forced fetch needs a cache-busting key"
+    assert captured["headers"]["Cache-Control"] == "no-cache"

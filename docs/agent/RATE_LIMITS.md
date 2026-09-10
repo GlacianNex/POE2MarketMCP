@@ -35,10 +35,21 @@ Currency prices come from poe.ninja, not GGG. Its timing, from live headers:
   revalidating.
 - Underlying data refreshes **~hourly**.
 
-The collector polls every 30 min (`ninja_cadence_minutes`) — polling faster
+The collector polls hourly (`ninja_cadence_minutes`) — polling faster
 returns the identical cached body. Requests carry a browser-like User-Agent and
 `Referer: https://poe.ninja/poe2/economy` (some non-browser requests 404). This
 is a public, unversioned, undocumented endpoint — treat it as best effort.
+
+### What actually limits freshness
+
+Measured: a CDN-cached response and a cache-bypassing origin request returned
+**byte-identical data** (52 currencies, zero differing). So the 30-minute CDN
+cache is not the binding constraint — poe.ninja's own recompute cadence
+(~hourly) is. The collector's hourly sweep is matched to that.
+
+`refresh_prices` bypasses the edge cache (verified: `cf-cache-status: MISS` vs
+`REVALIDATED`). That guarantees you are not reading a stale edge copy, but it
+cannot return numbers newer than poe.ninja has published.
 
 ## Etiquette this server follows
 

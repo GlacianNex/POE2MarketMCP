@@ -25,7 +25,7 @@ flowchart LR
 
     LLM(["your LLM"])
 
-    NINJA -->|every 30 min| COL
+    NINJA -->|hourly| COL
     GGG -.->|on demand| MCP
     MCP <--> LLM
 ```
@@ -64,8 +64,7 @@ just records an empty series until you notice.
 
 ## Rate limits
 
-**poe.ninja (currency)** — CDN-cached ~30 min; the collector polls on that
-cadence. Independent of GGG, so background collection never affects your
+**poe.ninja (currency)** — CDN-cached ~30 min; the collector polls hourly, matching how often the data actually changes. Independent of GGG, so background collection never affects your
 in-game trade.
 
 **GGG trade API (items, stash)** — called only on demand. Limits are advertised

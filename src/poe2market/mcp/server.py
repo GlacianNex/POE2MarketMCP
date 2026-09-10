@@ -118,12 +118,16 @@ def _age(ts: str | None) -> dict[str, Any]:
     except ValueError:
         return {"as_of": ts, "age_minutes": None, "stale": None}
     mins = (datetime.now(timezone.utc) - when).total_seconds() / 60.0
+    # Derived from the collector's own cadence rather than a fixed number, so
+    # changing the cadence keeps "stale" meaningful. Data is normally up to one
+    # full cadence old just before the next sweep; beyond 1.5x means a sweep was
+    # actually missed, not merely that we are between runs.
+    limit = cfg().ninja_cadence_minutes * 1.5
     return {
         "as_of": ts,
         "age_minutes": round(mins, 1),
-        # poe.ninja refreshes hourly and the collector sweeps every 30 min, so
-        # anything past ~90 min means collection is behind, not just cached.
-        "stale": mins > 90,
+        "stale": mins > limit,
+        "stale_after_minutes": round(limit),
     }
 
 
@@ -1054,10 +1058,12 @@ def setup_resource() -> str:
 async def refresh_prices(league: str = "") -> dict[str, Any]:
     """Fetch currency prices from poe.ninja right now, bypassing the schedule.
 
-    The collector already refreshes every 30 minutes, which matches poe.ninja's
-    cache window — so this is only worth calling when `stale: true` appears on a
-    result, or after the machine has been asleep or offline. Calling it more
-    often than that returns the same cached upstream data.
+    This is a **hard** refetch: it bypasses poe.ninja's CDN cache to reach the
+    origin, rather than re-reading the cached response the hourly sweep uses.
+    Worth calling when `stale: true` appears on a result, or after the machine
+    has been asleep or offline. Note poe.ninja recomputes its own numbers about
+    hourly, so a forced refetch guarantees the freshest published data — not
+    necessarily different data.
 
     Hits poe.ninja only; it does not touch GGG's trade API, so it cannot affect
     the player's in-game trade rate budget.
@@ -1071,7 +1077,7 @@ async def refresh_prices(league: str = "") -> dict[str, Any]:
 
     async with _client() as client:
         collector = Collector(cfg(), TradeAPI(client), store())
-        result = await collector.sweep_ninja_currency(league)
+        result = await collector.sweep_ninja_currency(league, force=True)
 
     priced = result.get("priced", 0)
     with store().conn() as c:
@@ -1084,9 +1090,11 @@ async def refresh_prices(league: str = "") -> dict[str, Any]:
         "currencies_priced": priced,
         **_age(row["t"] if row else None),
         "error": result.get("error"),
+        "forced": True,
         "note": (
-            "poe.ninja is CDN-cached ~30 min; refreshing faster than that "
-            "returns identical data."
+            "Hard refetch: CDN cache bypassed. poe.ninja recomputes hourly, so "
+            "this returns the freshest published data, which may match the "
+            "previous sweep."
         ),
     }
 

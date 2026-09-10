@@ -55,7 +55,7 @@ class ScheduledJob:
         """Pick the next run time.
 
         On failure this retries *sooner*, not later. Exponential backoff on the
-        full cadence is wrong for an outage: a 30-minute job that fails while
+        full cadence is wrong for an outage: an hourly job that fails while
         the network is down would wait hours after it returns. Instead a failing
         job polls on a short, capped interval so it resumes within a minute or
         two of connectivity coming back, then returns to its normal cadence on

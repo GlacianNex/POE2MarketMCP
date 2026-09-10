@@ -9,7 +9,7 @@ Two sources, each for what it does well:
 | **Currency** (orbs, omens, essences, uncut gems, …) | **poe.ninja** | Reflects the in-game Currency Exchange, where PoE2 currency actually trades. The GGG trade2 exchange reads a near-dead bulk market (single-digit offer counts) |
 | **Items / uniques** | GGG **trade2 search** | Returns hundreds of real listings; the right tool for gear |
 
-Currency is pulled from poe.ninja every ~30 min (its CDN cache window) and
+Currency is pulled from poe.ninja hourly (matching its refresh rate) and
 stored with `source='ninja'`. `currency_rate` prefers ninja samples over any
 older trade2 `exchange` rows. poe.ninja prices come denominated in Divine Orbs
 and are converted to the base currency via the exalted rate in the same feed.

@@ -142,8 +142,9 @@ class Config(BaseModel):
     )
     pair_currencies: list[str] = Field(default_factory=list)
     pair_cadence_minutes: int = Field(default=15, ge=1)
-    # poe.ninja refreshes ~hourly; no point polling faster.
-    ninja_cadence_minutes: int = Field(default=30, ge=5)
+    # poe.ninja's underlying data refreshes ~hourly, so polling faster just
+    # re-reads the same CDN-cached response.
+    ninja_cadence_minutes: int = Field(default=60, ge=5)
 
     # Your account handle, e.g. "Name#1234" — WITH the discriminator.
     # This is all that is needed to read your public listings; there is no

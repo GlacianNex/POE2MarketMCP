@@ -95,3 +95,6 @@ categories = ["*"]            # everything else: runes, vaal, delirium, gems
 cadence_minutes = 360         # ~500 items -> 100 requests spread over 6h
 enabled = false
 
+
+# poe.ninja refreshes ~hourly; polling faster re-reads the same cache.
+ninja_cadence_minutes = 60
