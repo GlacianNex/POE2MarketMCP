@@ -9,13 +9,25 @@ schedule and stores it in a local SQLite file; an MCP server reads that file to
 answer your LLM's questions instantly, with no network call at query time.
 Nothing is hosted, shared, or sent anywhere — it's your data, on your box.
 
-```
-   ┌─────────────────┐   writes    ┌──────────────┐   reads   ┌────────────┐
-   │ collector daemon│ ──────────► │  market.db   │ ◄──────── │ MCP server │
-   │ (background,24/7)│            │  (SQLite/WAL)│           │  14 tools  │
-   └────────┬────────┘             └──────────────┘           └────────────┘
-            ▼
-   poe.ninja (currency) · GGG trade API (items, on demand)
+```mermaid
+flowchart LR
+    NINJA["poe.ninja<br/><i>currency prices</i>"]
+    GGG["GGG trade API<br/><i>items &amp; stash</i>"]
+
+    subgraph local ["your machine"]
+        direction LR
+        COL["collector daemon<br/><i>background, 24/7</i>"]
+        DB[("market.db<br/>SQLite")]
+        MCP["MCP server<br/><i>14 tools</i>"]
+        COL -- writes --> DB
+        DB -- reads --> MCP
+    end
+
+    LLM(["your LLM"])
+
+    NINJA -- "every 30 min" --> COL
+    GGG -. "on demand<br/>(item / stash lookups)" .-> MCP
+    MCP <--> LLM
 ```
 
 **Data sources:** currency prices come from **poe.ninja** (the in-game Currency
