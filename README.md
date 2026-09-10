@@ -11,22 +11,22 @@ Nothing is hosted, shared, or sent anywhere — it's your data, on your box.
 
 ```mermaid
 flowchart LR
-    NINJA["poe.ninja<br/><i>currency prices</i>"]
-    GGG["GGG trade API<br/><i>items &amp; stash</i>"]
+    NINJA["poe.ninja<br/>currency prices"]
+    GGG["GGG trade API<br/>items and stash"]
 
-    subgraph local ["your machine"]
+    subgraph local["your machine"]
         direction LR
-        COL["collector daemon<br/><i>background, 24/7</i>"]
+        COL["collector daemon<br/>background, 24/7"]
         DB[("market.db<br/>SQLite")]
-        MCP["MCP server<br/><i>14 tools</i>"]
-        COL -- writes --> DB
-        DB -- reads --> MCP
+        MCP["MCP server<br/>14 tools"]
+        COL -->|writes| DB
+        DB -->|reads| MCP
     end
 
     LLM(["your LLM"])
 
-    NINJA -- "every 30 min" --> COL
-    GGG -. "on demand<br/>(item / stash lookups)" .-> MCP
+    NINJA -->|every 30 min| COL
+    GGG -.->|on demand| MCP
     MCP <--> LLM
 ```
 
