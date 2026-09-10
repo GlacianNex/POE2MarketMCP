@@ -3,6 +3,8 @@ name = "poe2market-mcp"
 version = "0.1.0"
 description = "MCP access point for Path of Exile 2 market data: live prices, per-league history, stash valuation, and trade preparation."
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "mcp>=1.2.0",
     "httpx>=0.27",

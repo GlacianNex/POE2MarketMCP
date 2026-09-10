@@ -233,3 +233,7 @@ pytest -q
 Covers rate-limit header parsing and cross-process budget sharing, bid/ask book
 maths, rollup OHLC correctness and idempotency, and the currency-unit
 separation that keeps divine-denominated listings out of exalted candles.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
