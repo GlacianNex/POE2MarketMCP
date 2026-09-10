@@ -622,3 +622,78 @@ def test_catchup_threshold_is_a_real_gap():
     j = _job(30)
     lateness = _td(minutes=30) * CATCHUP_FACTOR + _td(minutes=1)
     assert lateness > j.interval * CATCHUP_FACTOR
+
+
+# -- poe.ninja base-rate resilience ------------------------------------
+
+from poe2market.ggg.ninja import BASE_RATE_ATTEMPTS, NinjaClient
+
+
+class _FakeNinja(NinjaClient):
+    """Drives currency_quotes without network: scripts each overview call."""
+
+    def __init__(self, currency_payload, other_payload=None, fail_times=0):
+        self.retry_delay = 0          # no real sleeping in tests
+        self.currency_payload = currency_payload
+        self.other_payload = other_payload or {"items": [], "lines": []}
+        self.fail_times = fail_times
+        self.currency_calls = 0
+
+    async def _overview(self, league, type_):
+        if type_ == "Currency":
+            self.currency_calls += 1
+            if self.currency_calls <= self.fail_times:
+                raise RuntimeError("transient upstream error")
+            return self.currency_payload
+        return self.other_payload
+
+    async def aclose(self):
+        return None
+
+
+GOOD_CURRENCY = {
+    "items": [{"id": "exalted", "name": "Exalted Orb", "category": "Currency"},
+              {"id": "divine", "name": "Divine Orb", "category": "Currency"}],
+    "lines": [{"id": "exalted", "primaryValue": 0.004, "volumePrimaryValue": 100},
+              {"id": "divine", "primaryValue": 1.0, "volumePrimaryValue": 500}],
+}
+# The exact failure seen live: payload returns but the base currency is absent.
+NO_BASE_CURRENCY = {
+    "items": [{"id": "divine", "name": "Divine Orb", "category": "Currency"}],
+    "lines": [{"id": "divine", "primaryValue": 1.0, "volumePrimaryValue": 500}],
+}
+
+
+def test_transient_failure_is_retried_not_fatal():
+    n = _FakeNinja(GOOD_CURRENCY, fail_times=BASE_RATE_ATTEMPTS - 1)
+    q = asyncio.run(n.currency_quotes("L", "exalted", types=["Currency"]))
+    assert q, "sweep must survive transient base-rate failures"
+    # Failed attempts plus the one that succeeded; the payload is then reused
+    # for the Currency category rather than fetched again.
+    assert n.currency_calls == BASE_RATE_ATTEMPTS
+
+
+def test_missing_base_rate_falls_back_to_last_known():
+    """The live bug: base absent from payload wiped the entire sweep."""
+    n = _FakeNinja(NO_BASE_CURRENCY)
+    q = asyncio.run(n.currency_quotes(
+        "L", "exalted", types=["Currency"], fallback_base_in_divine=0.004))
+    assert "divine" in q, "fallback rate must keep prices flowing"
+    # divine is 1.0 divine; at 0.004 divine per exalted that's 250 exalted.
+    assert q["divine"].value_in_base == pytest.approx(250.0)
+
+
+def test_without_fallback_it_still_gives_up_cleanly():
+    n = _FakeNinja(NO_BASE_CURRENCY)
+    q = asyncio.run(n.currency_quotes("L", "exalted", types=["Currency"]))
+    assert q == {}
+
+
+def test_fallback_conversion_matches_stored_rate_direction():
+    """Stored rates are 'X in base'; the client needs 'base in divine'."""
+    divine_in_base = 250.0
+    fallback = 1.0 / divine_in_base
+    n = _FakeNinja(NO_BASE_CURRENCY)
+    q = asyncio.run(n.currency_quotes(
+        "L", "exalted", types=["Currency"], fallback_base_in_divine=fallback))
+    assert q["divine"].value_in_base == pytest.approx(divine_in_base)

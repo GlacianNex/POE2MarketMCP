@@ -20,11 +20,17 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import asyncio
+
 import httpx
 
 log = logging.getLogger(__name__)
 
 NINJA_BASE = "https://poe.ninja/poe2/api/economy"
+
+#: The base-rate request gates the whole sweep, so it gets its own retries.
+BASE_RATE_ATTEMPTS = 3
+BASE_RATE_RETRY_DELAY = 2.0
 
 # A browser-like UA and referer; poe.ninja 404s some non-browser requests.
 _HEADERS = {
@@ -61,7 +67,9 @@ class NinjaQuote:
 
 
 class NinjaClient:
-    def __init__(self, timeout: float = 20.0) -> None:
+    def __init__(self, timeout: float = 20.0,
+                 retry_delay: float = BASE_RATE_RETRY_DELAY) -> None:
+        self.retry_delay = retry_delay
         self._client = httpx.AsyncClient(headers=_HEADERS, timeout=timeout)
 
     async def aclose(self) -> None:
@@ -87,7 +95,8 @@ class NinjaClient:
         return r.json()
 
     async def currency_quotes(
-        self, league: str, base_currency: str, *, types: list[str] | None = None
+        self, league: str, base_currency: str, *, types: list[str] | None = None,
+        fallback_base_in_divine: float | None = None,
     ) -> dict[str, NinjaQuote]:
         """Fetch currency prices for ``league`` keyed by exchange id.
 
@@ -100,22 +109,51 @@ class NinjaClient:
         # category, but is needed to convert every category. Resolve it once
         # from Currency, then apply it to all — otherwise categories without an
         # exalted line (UncutGems, Fragments, ...) get silently skipped.
+        # Everything converts through the base currency's divine value, so a
+        # failure here would otherwise discard the entire sweep — all
+        # categories, hundreds of currencies — over one transient hiccup.
+        # Retry, then fall back to the last known rate supplied by the caller.
         base_in_divine = 1.0 if base_currency == "divine" else None
+        cached: dict[str, Any] = {}
         if base_in_divine is None:
-            try:
-                cur = await self._overview(league, "Currency")
-                by_id = {L["id"]: L for L in cur.get("lines", [])}
-                bl = by_id.get(base_currency)
-                base_in_divine = bl.get("primaryValue") if bl else None
-            except Exception as exc:
-                log.warning("poe.ninja base-rate lookup failed: %s", exc)
+            for attempt in range(BASE_RATE_ATTEMPTS):
+                try:
+                    cur = await self._overview(league, "Currency")
+                    cached["Currency"] = cur
+                    by_id = {L["id"]: L for L in cur.get("lines", [])}
+                    bl = by_id.get(base_currency)
+                    base_in_divine = bl.get("primaryValue") if bl else None
+                    if base_in_divine:
+                        break
+                    log.warning(
+                        "poe.ninja: %s missing from Currency payload (try %d/%d)",
+                        base_currency, attempt + 1, BASE_RATE_ATTEMPTS,
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "poe.ninja base-rate lookup failed (try %d/%d): %s",
+                        attempt + 1, BASE_RATE_ATTEMPTS, exc,
+                    )
+                if attempt + 1 < BASE_RATE_ATTEMPTS:
+                    await asyncio.sleep(self.retry_delay)
+
+        if not base_in_divine and fallback_base_in_divine:
+            # A slightly stale conversion rate is far better than no prices at
+            # all: the rate moves on the order of hours, the sweep every 30 min.
+            base_in_divine = fallback_base_in_divine
+            log.warning(
+                "poe.ninja: using last known %s rate (%.6g divine)",
+                base_currency, base_in_divine,
+            )
+
         if not base_in_divine:
             log.warning("poe.ninja: could not resolve %s rate", base_currency)
             return quotes
 
         for type_ in (types or CURRENCY_TYPES):
             try:
-                data = await self._overview(league, type_)
+                # The Currency payload was already fetched for the base rate.
+                data = cached.get(type_) or await self._overview(league, type_)
             except Exception as exc:
                 log.warning("poe.ninja %s/%s failed: %s", league, type_, exc)
                 continue

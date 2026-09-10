@@ -227,9 +227,17 @@ class Collector:
         league_id = self.store.league_id(league, self.cfg.realm)
         ts = utcnow()
 
+        # Last known conversion rate, so a transient base-rate failure upstream
+        # degrades to slightly-stale prices instead of no prices at all.
+        # Stored prices are "X in base"; the client needs "base in divine".
+        divine_in_base = self.store.currency_rate("divine", league)
+        fallback = (1.0 / divine_in_base) if divine_in_base else None
+
         try:
             async with NinjaClient() as ninja:
-                quotes = await ninja.currency_quotes(league, base)
+                quotes = await ninja.currency_quotes(
+                    league, base, fallback_base_in_divine=fallback
+                )
         except Exception as exc:
             log.warning("poe.ninja sweep failed: %s", exc)
             self.store.log_run("ninja", league, started, "error", detail=str(exc))
