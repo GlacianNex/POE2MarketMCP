@@ -389,6 +389,7 @@ class Store:
                 )
                 SELECT i.key, i.label, i.kind,
                        f.open AS start_price, l.close AS end_price,
+                       win.first_b AS start_bucket, win.last_b AS end_bucket,
                        l.base_currency, win.n AS samples,
                        CASE WHEN f.open > 0
                             THEN (l.close - f.open) / f.open * 100.0 END AS pct_change

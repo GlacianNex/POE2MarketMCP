@@ -48,7 +48,7 @@ measurement rather than assumed (see [FINDINGS](FINDINGS.md)):
                                     │ reads
                     ┌───────────────▼───────────────┐
                     │         MCP server             │   spawned per client
-                    │   14 tools · 6 resources       │   exits on disconnect
+                    │   15 tools · 6 resources       │   exits on disconnect
                     └────────────────────────────────┘
 ```
 

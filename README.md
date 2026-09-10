@@ -18,7 +18,7 @@ flowchart LR
         direction LR
         COL["collector daemon<br/>background, 24/7"]
         DB[("market.db<br/>SQLite")]
-        MCP["MCP server<br/>14 tools"]
+        MCP["MCP server<br/>15 tools"]
         COL -->|writes| DB
         DB -->|reads| MCP
     end
@@ -157,7 +157,7 @@ resources. What a client reads is exactly these files.
 
 | Document | Covers |
 |---|---|
-| [Tool reference](docs/agent/TOOL_REFERENCE.md) | All 14 tools: signatures, return shapes, examples, cost |
+| [Tool reference](docs/agent/TOOL_REFERENCE.md) | All 15 tools: signatures, return shapes, examples, cost |
 | [Setup](docs/agent/SETUP.md) | Install, config, daemon, watchlists, stash, troubleshooting |
 | [Agent guide](docs/agent/AGENT_GUIDE.md) | Answering correctly: confidence, units, empty-vs-absent |
 | [Data model](docs/agent/DATA_MODEL.md) | Price semantics, junk rejection, candles |

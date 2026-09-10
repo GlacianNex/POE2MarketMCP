@@ -107,6 +107,26 @@ def _confidence(n_listings: int, spread_pct: float | None) -> str:
     return f"high: {spread_pct:.0f}% spread, {n_listings} listings"
 
 
+def _age(ts: str | None) -> dict[str, Any]:
+    """Describe how old a timestamp is, so callers never guess at freshness."""
+    if not ts:
+        return {"as_of": None, "age_minutes": None, "stale": True}
+    from datetime import datetime, timezone
+
+    try:
+        when = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return {"as_of": ts, "age_minutes": None, "stale": None}
+    mins = (datetime.now(timezone.utc) - when).total_seconds() / 60.0
+    return {
+        "as_of": ts,
+        "age_minutes": round(mins, 1),
+        # poe.ninja refreshes hourly and the collector sweeps every 30 min, so
+        # anything past ~90 min means collection is behind, not just cached.
+        "stale": mins > 90,
+    }
+
+
 def _default_league() -> str:
     """The league every tool falls back to when none is named.
 
@@ -245,7 +265,7 @@ async def get_price(item_key: str, league: str = "") -> dict[str, Any]:
         "item_key": item_key,
         "label": row.get("label"),
         "league": league,
-        "as_of": row.get("ts"),
+        **_age(row.get("ts")),
         "source": source,
         "price": row.get("price_base"),
         "price_currency": row.get("base_currency"),
@@ -315,12 +335,14 @@ async def get_price_history(
         }
 
     first, last = candles[0], candles[-1]
+    freshness = _age(last.get("bucket"))
     change = None
     if first.get("open"):
         change = (last["close"] - first["open"]) / first["open"] * 100.0
     return {
         "item_key": item_key,
         "league": league,
+        **freshness,
         "resolution": ("hourly" if resolution == "hourly"
                        or (resolution == "auto" and days <= 14) else "daily"),
         "base_currency": last.get("base_currency"),
@@ -349,9 +371,11 @@ async def get_movers(
     rows = store().movers(
         league, days=days, limit=limit, min_samples=min_samples
     )
+    newest = max((r.get("end_bucket") or "" for r in rows), default="") or None
     return {
         "league": league,
         "window_days": days,
+        **_age(newest),
         "count": len(rows),
         "movers": [
             {**r, "pct_change": round(r["pct_change"], 1)} for r in rows
@@ -1024,6 +1048,47 @@ def tools_resource() -> str:
 )
 def setup_resource() -> str:
     return _doc("SETUP.md")
+
+
+@server.tool()
+async def refresh_prices(league: str = "") -> dict[str, Any]:
+    """Fetch currency prices from poe.ninja right now, bypassing the schedule.
+
+    The collector already refreshes every 30 minutes, which matches poe.ninja's
+    cache window — so this is only worth calling when `stale: true` appears on a
+    result, or after the machine has been asleep or offline. Calling it more
+    often than that returns the same cached upstream data.
+
+    Hits poe.ninja only; it does not touch GGG's trade API, so it cannot affect
+    the player's in-game trade rate budget.
+    """
+    from ..collect.jobs import Collector
+    from ..ggg.trade import TradeAPI
+
+    league = league or _default_league()
+    before = store().get_meta("resolved_leagues")  # touch store to init
+    del before
+
+    async with _client() as client:
+        collector = Collector(cfg(), TradeAPI(client), store())
+        result = await collector.sweep_ninja_currency(league)
+
+    priced = result.get("priced", 0)
+    with store().conn() as c:
+        row = c.execute(
+            "SELECT MAX(ts) t FROM price_sample WHERE source='ninja'"
+        ).fetchone()
+    return {
+        "ok": bool(priced),
+        "league": league,
+        "currencies_priced": priced,
+        **_age(row["t"] if row else None),
+        "error": result.get("error"),
+        "note": (
+            "poe.ninja is CDN-cached ~30 min; refreshing faster than that "
+            "returns identical data."
+        ),
+    }
 
 
 def main() -> None:

@@ -1,6 +1,6 @@
 # Tool reference
 
-14 tools in four groups. Signatures below are the real schemas; every argument
+15 tools in four groups. Signatures below are the real schemas; every argument
 not marked **required** has the default shown.
 
 Omit `league` and the active challenge league is used (resolved at runtime, so
@@ -53,6 +53,19 @@ empty history nearly always means the collector has not run long enough.
 What is scanned, how often, and at what priority — including currency tiers.
 
 ---
+
+## Freshness
+
+Every read tool returns `as_of` (when the data was actually collected),
+`age_minutes`, and `stale` (true past ~90 min). **Quote the age whenever it
+matters** — never imply data is live when it isn't.
+
+### `refresh_prices(league="")`
+
+Fetches currency prices from poe.ninja immediately, bypassing the schedule.
+Only worth calling when a result shows `stale: true`, or after the machine has
+been asleep or offline — poe.ninja is CDN-cached ~30 min, so refreshing faster
+returns identical data. Hits poe.ninja only; never touches GGG's rate budget.
 
 ## Prices
 
