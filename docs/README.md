@@ -1,7 +1,13 @@
 # Documentation
 
-Two audiences, deliberately separated. If you are adding a document, decide
-which of these it serves before choosing a directory.
+Start with [the README](../README.md) for the shortest first-run path, or
+[Setup and operations](agent/SETUP.md) for installation, MCP connection,
+background collection, upgrades, and troubleshooting. For day-to-day use,
+read [the agent guide](agent/AGENT_GUIDE.md) and
+[tool reference](agent/TOOL_REFERENCE.md).
+
+Two audiences are separated below. Setup serves both users and agents helping
+them configure the server; the other agent documents explain tool use.
 
 ## `agent/` — for whatever calls this server
 

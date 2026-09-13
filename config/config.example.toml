@@ -11,7 +11,7 @@ contact_email = "you@example.com"
 # league first (there is no date metadata for PoE2 leagues). The result is
 # cached, so a transient API failure cannot redirect collection elsewhere.
 # Leave as "@current" and a new league is picked up automatically at rollover.
-leagues = ["Forbidden Rites"]
+leagues = ["@current"]
 realm = "poe2"
 
 db_path = "data/market.db"
@@ -19,8 +19,8 @@ db_path = "data/market.db"
 # Everything is charted against this currency.
 base_currency = "exalted"
 
-# Sweep every liquid currency this often. Cheap: ~16 requests against a
-# 30-per-5-minute budget.
+# Legacy exchange setting; explicit currency tiers use their own cadence.
+# Default poe.ninja collection uses ninja_cadence_minutes below.
 currency_cadence_minutes = 10
 
 # Roll raw samples up into hourly/daily candles this often.
@@ -34,7 +34,7 @@ raw_retention_days = 14
 # Your account handle WITH discriminator, e.g. "Name#1234". Reads your public
 # trade listings (no login). Only tabs with a buyout price are visible.
 # Override with POE2MARKET_ACCOUNT.
-stash_account = "YourName#0000"
+stash_account = ""
 
 log_level = "INFO"
 
@@ -58,6 +58,10 @@ log_level = "INFO"
 pair_currencies = []
 pair_cadence_minutes = 15
 
+# poe.ninja is the default currency source. Keep this TOP LEVEL, before tables.
+ninja_cadence_minutes = 60
+
+# Advanced GGG exchange sweeps are disabled by default and spend trade budget.
 # --- Currency sweep tiers -------------------------------------------------
 # One exchange request prices at most 10 currencies, and both directions are
 # sampled, so a tier of N currencies costs ceil(N/10)*2 requests per pass.
@@ -94,7 +98,3 @@ name = "long-tail"
 categories = ["*"]            # everything else: runes, vaal, delirium, gems
 cadence_minutes = 360         # ~500 items -> 100 requests spread over 6h
 enabled = false
-
-
-# poe.ninja refreshes ~hourly; polling faster re-reads the same cache.
-ninja_cadence_minutes = 60
